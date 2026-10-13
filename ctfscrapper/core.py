@@ -1,0 +1,509 @@
+"""Core scraping logic for ctfscrapper"""
+
+import json
+import re
+import shutil
+import sys
+import time
+from pathlib import Path
+from typing import Dict, List, Optional, Any
+from urllib.parse import urljoin
+
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+
+class CTFScraper:
+    """Universal CTF Challenge Scraper supporting CTFd, NoCTF, and generic platforms."""
+
+    PLATFORMS = {
+        "ctfd": {
+            "api_challenges": "/api/v1/challenges",
+            "api_challenge": "/api/v1/challenges/{id}",
+            "login_field": "name",
+            "password_field": "password",
+            "nonce_field": "nonce",
+            "nonce_patterns": [
+                r"'csrfNonce':\s*\"([^\"]+)\"",
+                r'name="nonce"\s+value="([^"]+)"',
+                r'csrf-token["\']?\s*:\s*["\']([^"\']+)["\']',
+            ],
+        },
+        "noctf": {
+            "api_challenges": "/api/challenges",
+            "api_challenge": "/api/challenges/{id}",
+            "login_field": "username",
+            "password_field": "password",
+        },
+        "generic": {
+            "api_challenges": "/api/challenges",
+            "api_challenge": "/api/challenges/{id}",
+            "login_field": "username",
+            "password_field": "password",
+        },
+    }
+
+    def __init__(
+        self,
+        base_url: str,
+        username: str,
+        password: str,
+        platform: str = "auto",
+        output_dir: str = "ctf-data",
+        login_url: str = None,
+        verify_ssl: bool = True,
+        timeout: int = 30,
+        nc_timeout: int = 10,
+        delay: float = 0.1,
+        logger=None,
+    ):
+        self.base_url = base_url.rstrip("/")
+        self.username = username
+        self.password = password
+        self.platform = platform.lower()
+        self.output_dir = Path(output_dir)
+        self.login_url = login_url or f"{self.base_url}/login"
+        self.verify_ssl = verify_ssl
+        self.timeout = timeout
+        self.nc_timeout = nc_timeout
+        self.delay = delay
+        self.logger = logger or self._default_logger
+
+        self.session = requests.Session()
+        self.session.verify = verify_ssl
+
+        # Configure retries
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["HEAD", "GET", "OPTIONS", "POST"],
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
+
+        self.challenges = []
+        self.config = None
+
+    def _default_logger(self, level: str, msg: str):
+        """Default logger using print with colors"""
+        colors = {
+            "info": "\033[94m",  # Blue
+            "success": "\033[92m",  # Green
+            "warning": "\033[93m",  # Yellow
+            "error": "\033[91m",  # Red
+            "debug": "\033[90m",  # Gray
+            "reset": "\033[0m",
+        }
+        prefix = {
+            "info": "[*]",
+            "success": "[+]",
+            "warning": "[!]",
+            "error": "[-]",
+            "debug": "[>]",
+        }
+        color = colors.get(level, "")
+        reset = colors["reset"]
+        print(f"{color}{prefix.get(level, '[*]')} {msg}{reset}")
+
+    def detect_platform(self) -> str:
+        """Auto-detect CTF platform"""
+        self.logger("info", f"Detecting platform for {self.base_url}...")
+
+        try:
+            resp = self.session.get(self.base_url, timeout=10)
+            text_lower = resp.text.lower()
+            server = resp.headers.get("Server", "").lower()
+
+            if "ctfd" in text_lower or "ctfd" in server:
+                return "ctfd"
+            if "noctf" in text_lower:
+                return "noctf"
+
+            # Try API endpoints
+            for platform in ["ctfd", "noctf"]:
+                api_url = urljoin(self.base_url, self.PLATFORMS[platform]["api_challenges"])
+                resp = self.session.get(api_url, timeout=5)
+                if resp.status_code == 200:
+                    try:
+                        data = resp.json()
+                        if "data" in data or "results" in data:
+                            return platform
+                    except:
+                        pass
+
+            return "generic"
+        except Exception as e:
+            self.logger("warning", f"Platform detection failed: {e}")
+            return "generic"
+
+    def get_csrf_nonce(self) -> Optional[str]:
+        """Extract CSRF nonce from login page (CTFd specific)"""
+        try:
+            resp = self.session.get(self.login_url, timeout=10)
+            config = self.PLATFORMS.get("ctfd", {})
+
+            for pattern in config.get("nonce_patterns", []):
+                match = re.search(pattern, resp.text)
+                if match:
+                    return match.group(1)
+        except Exception as e:
+            self.logger("debug", f"Nonce extraction error: {e}")
+        return None
+
+    def login(self) -> bool:
+        """Login to CTF platform"""
+        self.logger("info", f"Logging in to {self.base_url}...")
+
+        self.config = self.PLATFORMS.get(self.platform, self.PLATFORMS["generic"])
+
+        # Get CSRF nonce for CTFd
+        nonce = None
+        if self.platform == "ctfd":
+            nonce = self.get_csrf_nonce()
+            if nonce:
+                self.logger("success", "Found CSRF nonce")
+
+        # Prepare login data
+        login_data = {
+            self.config["login_field"]: self.username,
+            self.config["password_field"]: self.password,
+        }
+
+        if nonce and self.config.get("nonce_field"):
+            login_data[self.config["nonce_field"]] = nonce
+
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Referer": self.login_url,
+        }
+
+        try:
+            resp = self.session.post(
+                self.login_url,
+                data=login_data,
+                headers=headers,
+                timeout=self.timeout,
+                allow_redirects=True,
+            )
+
+            # Verify login by accessing challenges API
+            if resp.status_code in [200, 302]:
+                test_url = urljoin(self.base_url, self.config["api_challenges"])
+                test_resp = self.session.get(test_url, timeout=10)
+                if test_resp.status_code == 200:
+                    try:
+                        data = test_resp.json()
+                        if data.get("success") or "data" in data or "results" in data:
+                            self.logger("success", "Login successful!")
+                            return True
+                    except:
+                        pass
+
+            self.logger("error", f"Login failed (status: {resp.status_code})")
+            if resp.status_code == 403:
+                self.logger(
+                    "warning",
+                    "Got 403 - check if platform needs special headers or has rate limiting",
+                )
+            return False
+
+        except Exception as e:
+            self.logger("error", f"Login error: {e}")
+            return False
+
+    def fetch_challenges_list(self) -> List[Dict]:
+        """Fetch list of all challenges"""
+        api_url = urljoin(self.base_url, self.config["api_challenges"])
+        self.logger("info", f"Fetching challenges from API...")
+
+        try:
+            resp = self.session.get(api_url, timeout=self.timeout)
+            resp.raise_for_status()
+            data = resp.json()
+
+            if "data" in data:
+                challenges = data["data"]
+            elif "results" in data:
+                challenges = data["results"]
+            elif isinstance(data, list):
+                challenges = data
+            else:
+                challenges = []
+
+            self.logger("success", f"Found {len(challenges)} challenges")
+            return challenges
+
+        except Exception as e:
+            self.logger("error", f"Failed to fetch challenges: {e}")
+            return []
+
+    def fetch_challenge_details(self, challenge_id: int) -> Optional[Dict]:
+        """Fetch detailed info for a single challenge"""
+        api_url = urljoin(self.base_url, self.config["api_challenge"].format(id=challenge_id))
+
+        try:
+            resp = self.session.get(api_url, timeout=self.timeout)
+            resp.raise_for_status()
+            data = resp.json()
+
+            if data.get("success") and "data" in data:
+                return data["data"]
+            elif "data" in data:
+                return data["data"]
+            return data
+
+        except Exception as e:
+            self.logger("debug", f"Failed to fetch challenge {challenge_id}: {e}")
+            return None
+
+    def download_file(self, file_url: str, dest_path: Path) -> bool:
+        """Download a challenge file"""
+        try:
+            if file_url.startswith("/"):
+                full_url = urljoin(self.base_url, file_url)
+            else:
+                full_url = file_url
+
+            resp = self.session.get(full_url, timeout=self.timeout, stream=True)
+            resp.raise_for_status()
+
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(dest_path, "wb") as f:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            return True
+
+        except Exception as e:
+            self.logger("debug", f"Failed to download {file_url}: {e}")
+            return False
+
+    def connect_netcat(self, host: str, port: int) -> str:
+        """Connect to netcat service and capture output"""
+        import socket
+
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(self.nc_timeout)
+            sock.connect((host, port))
+
+            data = b""
+            try:
+                while True:
+                    chunk = sock.recv(4096)
+                    if not chunk:
+                        break
+                    data += chunk
+            except socket.timeout:
+                pass
+            sock.close()
+
+            return data.decode("utf-8", errors="replace")
+
+        except Exception as e:
+            return f"Connection failed: {e}"
+
+    @staticmethod
+    def sanitize_filename(name: str) -> str:
+        """Sanitize filename for filesystem (cross-platform)"""
+        # Windows forbidden chars: < > : " / \ | ? *
+        # Also handle reserved names
+        name = re.sub(r'[<>:"/\\|?*]', "_", name)
+        name = name.strip(". ")
+
+        # Windows reserved names
+        reserved = {
+            "CON",
+            "PRN",
+            "AUX",
+            "NUL",
+            "COM1",
+            "COM2",
+            "COM3",
+            "COM4",
+            "COM5",
+            "COM6",
+            "COM7",
+            "COM8",
+            "COM9",
+            "LPT1",
+            "LPT2",
+            "LPT3",
+            "LPT4",
+            "LPT5",
+            "LPT6",
+            "LPT7",
+            "LPT8",
+            "LPT9",
+        }
+        if name.upper() in reserved:
+            name = f"_{name}"
+
+        return name[:255]
+
+    def organize_challenges(self, download_files: bool = True, connect_nc: bool = True):
+        """Organize all challenges into category/challenge folders"""
+        self.logger("info", f"Organizing {len(self.challenges)} challenges...")
+
+        if self.output_dir.exists():
+            shutil.rmtree(self.output_dir)
+        self.output_dir.mkdir(parents=True)
+
+        # Group by category
+        categories = {}
+        for c in self.challenges:
+            cat = c.get("category", "Unknown")
+            if cat not in categories:
+                categories[cat] = []
+            categories[cat].append(c)
+
+        for cat_name, challenges in categories.items():
+            cat_dir = self.output_dir / self.sanitize_filename(cat_name)
+            cat_dir.mkdir(exist_ok=True)
+
+            challenges.sort(key=lambda x: x.get("value", 0))
+
+            for c in challenges:
+                chal_name = self.sanitize_filename(
+                    c.get("name", f"challenge_{c.get('id', 'unknown')}")
+                )
+                chal_dir = cat_dir / chal_name
+                chal_dir.mkdir(exist_ok=True)
+
+                # Write info.txt
+                self._write_info_file(c, chal_dir)
+
+                # Download files
+                if download_files:
+                    files = c.get("files", [])
+                    if files:
+                        files_dir = chal_dir / "files"
+                        files_dir.mkdir(exist_ok=True)
+
+                        for file_url in files:
+                            filename = file_url.split("/")[-1].split("?")[0]
+                            if not filename or filename == "chall":
+                                filename = f"file_{c.get('id', 'unknown')}"
+                            dest = files_dir / self.sanitize_filename(filename)
+                            if not dest.exists():
+                                self.logger("info", f"Downloading {c['name']} -> {filename}")
+                                self.download_file(file_url, dest)
+                                time.sleep(self.delay)
+
+                # Connect to netcat
+                if connect_nc:
+                    conn_info = c.get("connection_info", "")
+                    if conn_info and "nc " in conn_info:
+                        nc_match = re.search(r"nc\s+(\S+)\s+(\d+)", conn_info)
+                        if nc_match:
+                            host, port = nc_match.group(1), int(nc_match.group(2))
+                            self.logger("info", f"Connecting to nc {host} {port}...")
+                            output = self.connect_netcat(host, port)
+                            nc_file = chal_dir / "nc_output.txt"
+                            with open(nc_file, "w", encoding="utf-8") as f:
+                                f.write(f"Connection: nc {host} {port}\n")
+                                f.write(f"Output:\n{output}\n")
+                            time.sleep(self.delay)
+
+        # Save summary JSON
+        self._save_summary(categories)
+        self.logger("success", f"Done! Data saved to {self.output_dir}")
+
+    def _write_info_file(self, challenge: Dict, chal_dir: Path):
+        """Write challenge info.txt"""
+        info_file = chal_dir / "info.txt"
+        with open(info_file, "w", encoding="utf-8") as f:
+            f.write(f"Challenge: {challenge.get('name', 'Unknown')}\n")
+            f.write(f"ID: {challenge.get('id', 'N/A')}\n")
+            f.write(f"Category: {challenge.get('category', 'N/A')}\n")
+            f.write(f"Points: {challenge.get('value', 'N/A')}\n")
+            f.write(f"Solves: {challenge.get('solves', 'N/A')}\n")
+            f.write(f"Type: {challenge.get('type', 'N/A')}\n")
+            if challenge.get("attribution"):
+                f.write(f"Author: {challenge['attribution']}\n")
+            if challenge.get("connection_info"):
+                f.write(f"Connection: {challenge['connection_info']}\n")
+            if challenge.get("tags"):
+                tags = []
+                for t in challenge["tags"]:
+                    if isinstance(t, dict):
+                        tags.append(t.get("value", str(t)))
+                    else:
+                        tags.append(str(t))
+                f.write(f"Tags: {', '.join(tags)}\n")
+            f.write(f"\nDescription:\n{challenge.get('description', 'No description')}\n")
+            if challenge.get("hints"):
+                f.write(f"\nHints:\n")
+                for hint in challenge["hints"]:
+                    hint_text = hint.get("content", hint.get("hint", str(hint)))
+                    f.write(f"  - {hint_text}\n")
+
+    def _save_summary(self, categories: Dict):
+        """Save summary.json"""
+        summary_file = self.output_dir / "summary.json"
+        with open(summary_file, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "ctf_url": self.base_url,
+                    "platform": self.platform,
+                    "total_challenges": len(self.challenges),
+                    "categories": {k: len(v) for k, v in categories.items()},
+                    "challenges": [
+                        {
+                            "id": c.get("id"),
+                            "name": c.get("name"),
+                            "category": c.get("category"),
+                            "value": c.get("value"),
+                            "solves": c.get("solves"),
+                            "connection_info": c.get("connection_info"),
+                            "has_files": bool(c.get("files")),
+                            "has_nc": "nc " in (c.get("connection_info") or ""),
+                        }
+                        for c in self.challenges
+                    ],
+                },
+                f,
+                indent=2,
+                ensure_ascii=False,
+            )
+
+    def run(
+        self,
+        download_files: bool = True,
+        connect_nc: bool = True,
+        max_challenges: Optional[int] = None,
+    ) -> bool:
+        """Main execution flow"""
+        self.logger("info", "Starting CTF Challenge Scraper")
+        self.logger("info", f"Target: {self.base_url}")
+        self.logger("info", f"Platform: {self.platform}")
+        self.logger("info", f"Output: {self.output_dir}")
+
+        if self.platform == "auto":
+            self.platform = self.detect_platform()
+            self.logger("info", f"Detected platform: {self.platform}")
+
+        if not self.login():
+            return False
+
+        challenge_list = self.fetch_challenges_list()
+        if not challenge_list:
+            return False
+
+        if max_challenges:
+            challenge_list = challenge_list[:max_challenges]
+
+        self.logger("info", f"Fetching details for {len(challenge_list)} challenges...")
+        for i, chal in enumerate(challenge_list, 1):
+            chal_id = chal.get("id")
+            name = chal.get("name", chal_id)
+            self.logger("info", f"[{i}/{len(challenge_list)}] {name} (ID: {chal_id})")
+            details = self.fetch_challenge_details(chal_id)
+            if details:
+                self.challenges.append(details)
+            time.sleep(self.delay)
+
+        self.organize_challenges(download_files=download_files, connect_nc=connect_nc)
+        return True

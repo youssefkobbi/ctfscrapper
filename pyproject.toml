@@ -1,0 +1,87 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ctfscrapper"
+version = "1.0.0"
+description = "Universal CTF Challenge Scraper for CTFd, NoCTF, and generic platforms"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "CTF Player", email = "ctfplayer@example.com"}
+]
+maintainers = [
+    {name = "CTF Player", email = "ctfplayer@example.com"}
+]
+keywords = [
+    "ctf", "ctfd", "noctf", "scraper", "security", "hacking", "challenges"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "requests>=2.28.0",
+    "urllib3>=1.26.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "flake8>=6.0",
+    "mypy>=1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/ctfscrapper"
+Repository = "https://github.com/yourusername/ctfscrapper"
+Issues = "https://github.com/yourusername/ctfscrapper/issues"
+Documentation = "https://github.com/yourusername/ctfscrapper/wiki"
+
+[project.scripts]
+ctfscrapper = "ctfscrapper.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ctfscrapper*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --strict-markers"
+
+[tool.black]
+line-length = 100
+target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+include = '\.pyi?$'
+
+[tool.flake8]
+max-line-length = 100
+extend-ignore = ["E203", "W503"]
+exclude = [".git", "__pycache__", "venv", "env", ".tox", "dist", "build"]
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
