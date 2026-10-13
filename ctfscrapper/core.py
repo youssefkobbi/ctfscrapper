@@ -3,10 +3,9 @@
 import json
 import re
 import shutil
-import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 from urllib.parse import urljoin
 
 import requests
@@ -131,7 +130,7 @@ class CTFScraper:
                         data = resp.json()
                         if "data" in data or "results" in data:
                             return platform
-                    except:
+                    except Exception:
                         pass
 
             return "generic"
@@ -199,7 +198,7 @@ class CTFScraper:
                         if data.get("success") or "data" in data or "results" in data:
                             self.logger("success", "Login successful!")
                             return True
-                    except:
+                    except Exception:
                         pass
 
             self.logger("error", f"Login failed (status: {resp.status_code})")
@@ -217,7 +216,7 @@ class CTFScraper:
     def fetch_challenges_list(self) -> List[Dict]:
         """Fetch list of all challenges"""
         api_url = urljoin(self.base_url, self.config["api_challenges"])
-        self.logger("info", f"Fetching challenges from API...")
+        self.logger("info", "Fetching challenges from API...")
 
         try:
             resp = self.session.get(api_url, timeout=self.timeout)
@@ -435,7 +434,7 @@ class CTFScraper:
                 f.write(f"Tags: {', '.join(tags)}\n")
             f.write(f"\nDescription:\n{challenge.get('description', 'No description')}\n")
             if challenge.get("hints"):
-                f.write(f"\nHints:\n")
+                f.write("\nHints:\n")
                 for hint in challenge["hints"]:
                     hint_text = hint.get("content", hint.get("hint", str(hint)))
                     f.write(f"  - {hint_text}\n")

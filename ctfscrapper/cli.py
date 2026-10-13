@@ -3,7 +3,6 @@
 import argparse
 import sys
 import os
-from typing import Optional
 
 from .core import CTFScraper
 from .interactive import run_interactive
@@ -73,20 +72,20 @@ Usage Modes:
      ctfscrapper
 
 Examples:
-  # Interactive mode - just provide URL
-  ctfscrapper https://ctf.securinets-enit.club
+   # Interactive mode - just provide URL
+   ctfscrapper https://ctf.example.com
 
-  # Direct mode with all args
-  ctfscrapper -u https://ctf.example.com -U user -P pass -o my_data
+   # Direct mode with all args
+   ctfscrapper -u https://ctf.example.com -U user -P pass -o my_data
 
-  # CTFd explicit
-  ctfscrapper -u https://ctf.example.com -U user -P pass --platform ctfd
+   # CTFd explicit
+   ctfscrapper -u https://ctf.example.com -U user -P pass --platform ctfd
 
-  # Skip features for speed
-  ctfscrapper -u https://ctf.example.com -U user -P pass --no-files --no-nc
+   # Skip features for speed
+   ctfscrapper -u https://ctf.example.com -U user -P pass --no-files --no-nc
 
-  # Quiet for CI/CD
-  ctfscrapper -u https://ctf.example.com -U user -P pass -q
+   # Quiet for CI/CD
+   ctfscrapper -u https://ctf.example.com -U user -P pass -q
 
 Environment Variables:
   CTFSCRAPPER_URL     Default CTF URL

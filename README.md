@@ -9,9 +9,9 @@
 
 ```
     ██████╗██╗  ██╗███████╗███████╗████████╗ ██████╗ ██████╗ ███╗   ██╗
-   ██════╝██║  ██║██════╝██════╝╚══██╔══╝██╔═══██╗██╔══██╗████╗  ██║
+   ██╔════╝██║  ██║██╔════╝██╔════╝╚══██╔══╝██╔═══██╗██╔══██╗████╗  ██║
    ██║     ███████║█████╗  ███████╗   ██║   ██║   ██║██████╔╝██╔██╗ ██║
-   ██║     ██╔══██║██═══╝  ╚════██║   ██║   ██║   ██║██═══██╗██║╚██╗██║
+   ██║     ██╔══██║██╔═══╝  ╚════██║   ██║   ██║   ██║██╔══██╗██║╚██╗██║
    ╚██████╗██║  ██║███████╗███████║   ██║   ╚██████╔╝██║  ██║██║ ╚████║
     ╚═════╝╚═╝  ╚═╝╚══════╝╚══════╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝
               Universal CTF Challenge Scraper v1.0.0
@@ -51,7 +51,7 @@ python -m ctfscrapper --help
 
 ```bash
 # CTFd (auto-detected)
-ctfscrapper -u https://ctf.securinets-enit.club -U hoho -P hoho
+ctfscrapper -u https://ctf.example.com -U myuser -P mypass
 
 # Explicit platform
 ctfscrapper -u https://ctf.example.com -U user -P pass --platform ctfd
@@ -84,7 +84,7 @@ ctf-data/
 │   │   ├── files/
 │   │   │   ├── challenge.c       # Source code
 │   │   │   └── chall             # Binary
-│   │   └── nc_output.txt         # "=== SecurinetsENIT baby_win ===\nTell me a story:"
+│   │   └── nc_output.txt         # "=== CTF baby_win ===\nTell me a story:"
 │   ├── Libc_Voyage/
 │   │   ├── info.txt
 │   │   ├── files/
@@ -116,6 +116,7 @@ ctf-data/
 ```
 
 ### info.txt Format
+
 ```
 Challenge: Baby Win
 ID: 73
@@ -123,8 +124,8 @@ Category: pwn
 Points: 100
 Solves: 49
 Type: dynamic
-Author: Written by MrxFuji (Ahmed Salhi)
-Connection: nc pwn.securinets-enit.club 1300
+Author: Written by Author Name
+Connection: nc pwn.example.com 1300
 Tags: ret2win
 
 Description:
@@ -132,9 +133,10 @@ A first stack-smashing exercise. Redirect execution to the function that was nev
 ```
 
 ### summary.json
+
 ```json
 {
-  "ctf_url": "https://ctf.securinets-enit.club",
+  "ctf_url": "https://ctf.example.com",
   "platform": "ctfd",
   "total_challenges": 138,
   "categories": {
@@ -153,7 +155,7 @@ A first stack-smashing exercise. Redirect execution to the function that was nev
       "category": "pwn",
       "value": 100,
       "solves": 49,
-      "connection_info": "nc pwn.securinets-enit.club 1300",
+      "connection_info": "nc pwn.example.com 1300",
       "has_files": true,
       "has_nc": true
     }
@@ -197,6 +199,7 @@ Display:
 ## 🎯 Examples
 
 ### Full Scrape with All Features
+
 ```bash
 ctfscrapper \
   -u https://ctf.example.com \
@@ -207,11 +210,13 @@ ctfscrapper \
 ```
 
 ### Quick Recon (Metadata Only)
+
 ```bash
 ctfscrapper -u https://ctf.example.com -U u -P p --no-files --no-nc --max 5
 ```
 
 ### CI/CD Pipeline
+
 ```bash
 # In your CI script
 ctfscrapper \
@@ -224,6 +229,7 @@ ctfscrapper \
 ```
 
 ### Windows PowerShell
+
 ```powershell
 # Works natively on Windows
 python -m ctfscrapper -u https://ctf.example.com -U user -P pass
@@ -232,6 +238,7 @@ python -m ctfscrapper -u https://ctf.example.com -U user -P pass
 ## 🔧 Advanced Usage
 
 ### As a Python Module
+
 ```python
 from ctfscrapper import CTFScraper
 
@@ -250,6 +257,7 @@ success = scraper.run(download_files=True, connect_nc=True)
 ```
 
 ### Custom Logger
+
 ```python
 import logging
 

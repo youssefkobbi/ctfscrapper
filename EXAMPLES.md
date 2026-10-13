@@ -5,10 +5,10 @@
 ```bash
 # Full scrape with all features
 ctfscrapper \
-  --url https://ctf.securinets-enit.club \
-  --user hoho \
-  --pass hoho \
-  --output securinets_ctf \
+  --url https://ctf.example.com \
+  --user myuser \
+  --pass mypass \
+  --output my_ctf_data \
   --platform ctfd
 ```
 
@@ -30,9 +30,9 @@ ctfscrapper \
 
 ```bash
 # Set once in your shell profile
-export CTFSCRAPPER_URL="https://ctf.securinets-enit.club"
-export CTFSCRAPPER_USER="hoho"
-export CTFSCRAPPER_PASS="hoho"
+export CTFSCRAPPER_URL="https://ctf.example.com"
+export CTFSCRAPPER_USER="myuser"
+export CTFSCRAPPER_PASS="mypass"
 
 # Then just run
 ctfscrapper -o my_ctf_data
