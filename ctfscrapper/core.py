@@ -895,6 +895,8 @@ class CTFScraper:
             },
             "last_scraped": time.strftime("%Y-%m-%d %H:%M:%S"),
         }
+        # Ensure output directory exists
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         try:
             with open(self._get_metadata_path(), "w", encoding="utf-8") as f:
                 json.dump(meta, f, indent=2, ensure_ascii=False)
