@@ -175,6 +175,9 @@ def run_selective_scrape(
     nc_timeout: int,
     delay: float,
     ctf_name: str,
+    malware_scan: bool = True,
+    quarantine_dir: Optional[str] = None,
+    max_scan_time: int = 60,
 ) -> int:
     """Run interactive selective scraping"""
     print(f"\n{'='*60}")
@@ -269,6 +272,9 @@ def run_selective_scrape(
             challenge_filter=selected_challenges,
             download_files=True,
             connect_nc=True,
+            malware_scan=malware_scan,
+            quarantine_dir=quarantine_dir,
+            max_scan_time=max_scan_time,
         )
         return 0 if success else 1
     except Exception as e:
@@ -355,6 +361,20 @@ def run_interactive(
 
     verify_ssl = prompt_yes_no("Verify SSL certificates?", True)
 
+    # Malware scanning options
+    print("\n--- Malware Scanning Options ---")
+    malware_scan = prompt_yes_no("Enable malware scanning?", True)
+
+    quarantine_dir = None
+    max_scan_time = 60
+    if malware_scan:
+        quarantine_dir = prompt_with_default(
+            "Quarantine directory (relative to output)", ".quarantine"
+        )
+        if not quarantine_dir:
+            quarantine_dir = ".quarantine"
+        max_scan_time = int(prompt_with_default("Max scan time per file (seconds)", "60"))
+
     # Mode selection
     print("\n--- Scrape Mode ---")
     print("  1. Selective Scrape (choose categories and challenges)")
@@ -371,10 +391,13 @@ def run_interactive(
                 output_dir=output_dir,
                 login_url=None,
                 verify_ssl=verify_ssl,
-                timeout=30,
-                nc_timeout=10,
-                delay=0.1,
+                timeout=timeout,
+                nc_timeout=nc_timeout,
+                delay=delay,
                 ctf_name=ctf_name,
+                malware_scan=malware_scan,
+                quarantine_dir=quarantine_dir,
+                max_scan_time=max_scan_time,
             )
         elif choice == "2":
             # Use the collected settings for full scrape
@@ -392,6 +415,10 @@ def run_interactive(
     print(f"  CTF Name: {ctf_name}")
     print(f"  Download files: {'Yes' if download_files else 'No'}")
     print(f"  Connect netcat: {'Yes' if connect_nc else 'No'}")
+    print(f"  Malware scan: {'Yes' if malware_scan else 'No'}")
+    if malware_scan:
+        print(f"  Quarantine dir: {quarantine_dir}")
+        print(f"  Max scan time: {max_scan_time}s")
     if max_challenges:
         print(f"  Max challenges: {max_challenges}")
     print(f"  Verify SSL: {'Yes' if verify_ssl else 'No'}")
@@ -420,8 +447,24 @@ def run_interactive(
             download_files=download_files,
             connect_nc=connect_nc,
             max_challenges=max_challenges,
+            malware_scan=malware_scan,
+            quarantine_dir=quarantine_dir,
+            max_scan_time=max_scan_time,
         )
         return 0 if success else 1
+    except Exception as e:
+        error_msg = str(e)
+        if "Could not find challenges API endpoint" in error_msg:
+            print("[-] Error: Could not find the challenges API endpoint.")
+            print(
+                "    The provided URL may not be a valid CTFd instance, "
+                "or the challenges API is not accessible."
+            )
+            print(
+                "    Try providing the exact challenges page URL "
+                "(e.g., https://ctf.example.com/challenges)"
+            )
+        return 1
     except Exception as e:
         error_msg = str(e)
         if "Could not find challenges API endpoint" in error_msg:

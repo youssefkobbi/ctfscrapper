@@ -502,7 +502,14 @@ class CTFScraper:
         self.logger("error", "Could not find a working challenges API endpoint")
         return None
 
-    def organize_challenges(self, download_files: bool = True, connect_nc: bool = True):
+    def organize_challenges(
+        self,
+        download_files: bool = True,
+        connect_nc: bool = True,
+        malware_scan: bool = True,
+        quarantine_dir: Optional[str] = None,
+        max_scan_time: int = 60,
+    ):
         """Organize all challenges into category/challenge folders"""
         self.logger("info", f"Organizing {len(self.challenges)} challenges...")
 
@@ -706,6 +713,9 @@ class CTFScraper:
         download_files: bool = True,
         connect_nc: bool = True,
         max_challenges: Optional[int] = None,
+        malware_scan: bool = True,
+        quarantine_dir: Optional[str] = None,
+        max_scan_time: int = 60,
     ) -> bool:
         """Main execution flow"""
         self.logger("info", "Starting CTF Challenge Scraper")
@@ -744,7 +754,13 @@ class CTFScraper:
                 self._save_incremental_metadata()
             time.sleep(self.delay)
 
-        self.organize_challenges(download_files=download_files, connect_nc=connect_nc)
+        self.organize_challenges(
+            download_files=download_files,
+            connect_nc=connect_nc,
+            malware_scan=malware_scan,
+            quarantine_dir=quarantine_dir,
+            max_scan_time=max_scan_time,
+        )
         return True
 
     def run_selective(
@@ -753,6 +769,9 @@ class CTFScraper:
         challenge_filter: Optional[Dict[str, List[str]]] = None,
         download_files: bool = True,
         connect_nc: bool = True,
+        malware_scan: bool = True,
+        quarantine_dir: Optional[str] = None,
+        max_scan_time: int = 60,
     ) -> bool:
         """Selective scraping with category and challenge filters"""
         self.logger("info", "Starting CTF Challenge Scraper (Selective Mode)")
@@ -800,7 +819,13 @@ class CTFScraper:
         if challenge_filter:
             self.challenges = self._apply_challenge_filter(self.challenges, challenge_filter)
 
-        self.organize_challenges(download_files=download_files, connect_nc=connect_nc)
+        self.organize_challenges(
+            download_files=download_files,
+            connect_nc=connect_nc,
+            malware_scan=malware_scan,
+            quarantine_dir=quarantine_dir,
+            max_scan_time=max_scan_time,
+        )
         return True
 
     def _apply_challenge_filter(

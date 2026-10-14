@@ -130,6 +130,31 @@ Exit Codes:
         "--max", type=int, dest="max_challenges", help="Maximum number of challenges to process"
     )
 
+    # Malware scanning options
+    malware = parser.add_argument_group("Malware Scanning Options")
+    malware.add_argument(
+        "--malware-scan",
+        action="store_true",
+        default=True,
+        help="Enable malware scanning (default: enabled)",
+    )
+    malware.add_argument(
+        "--no-malware-scan",
+        action="store_false",
+        dest="malware_scan",
+        help="Disable malware scanning",
+    )
+    malware.add_argument(
+        "--quarantine-dir",
+        help="Directory for quarantined files (default: .quarantine in output dir)",
+    )
+    malware.add_argument(
+        "--max-scan-time",
+        type=int,
+        default=60,
+        help="Max scan time per file in seconds (default: 60)",
+    )
+
     # Network options
     network = parser.add_argument_group("Network Options")
     network.add_argument(
@@ -221,6 +246,9 @@ def run_direct_mode(args) -> int:
             download_files=not args.no_files,
             connect_nc=not args.no_nc,
             max_challenges=args.max_challenges,
+            malware_scan=getattr(args, "malware_scan", True),
+            quarantine_dir=getattr(args, "quarantine_dir", None),
+            max_scan_time=getattr(args, "max_scan_time", 60),
         )
         return 0 if success else 1
     except KeyboardInterrupt:
