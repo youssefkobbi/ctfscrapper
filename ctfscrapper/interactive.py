@@ -263,14 +263,27 @@ def run_selective_scrape(
         delay=0.1,
     )
 
-    success = scraper.run_selective(
-        category_filter=list(selected_challenges.keys()),
-        challenge_filter=selected_challenges,
-        download_files=True,
-        connect_nc=True,
-    )
-
-    return 0 if success else 1
+    try:
+        success = scraper.run_selective(
+            category_filter=list(selected_challenges.keys()),
+            challenge_filter=selected_challenges,
+            download_files=True,
+            connect_nc=True,
+        )
+        return 0 if success else 1
+    except Exception as e:
+        error_msg = str(e)
+        if "Could not find challenges API endpoint" in error_msg:
+            print("[-] Error: Could not find the challenges API endpoint.")
+            print(
+                "    The provided URL may not be a valid CTFd instance, "
+                "or the challenges API is not accessible."
+            )
+            print(
+                "    Try providing the exact challenges page URL "
+                "(e.g., https://ctf.example.com/challenges)"
+            )
+        return 1
 
 
 def run_interactive(
@@ -392,10 +405,23 @@ def run_interactive(
         delay=delay,
     )
 
-    success = scraper.run(
-        download_files=download_files,
-        connect_nc=connect_nc,
-        max_challenges=max_challenges,
-    )
-
-    return 0 if success else 1
+    try:
+        success = scraper.run(
+            download_files=download_files,
+            connect_nc=connect_nc,
+            max_challenges=max_challenges,
+        )
+        return 0 if success else 1
+    except Exception as e:
+        error_msg = str(e)
+        if "Could not find challenges API endpoint" in error_msg:
+            print("[-] Error: Could not find the challenges API endpoint.")
+            print(
+                "    The provided URL may not be a valid CTFd instance, "
+                "or the challenges API is not accessible."
+            )
+            print(
+                "    Try providing the exact challenges page URL "
+                "(e.g., https://ctf.example.com/challenges)"
+            )
+        return 1

@@ -227,11 +227,30 @@ def run_direct_mode(args) -> int:
         print("\n[!] Interrupted by user")
         return 130
     except Exception as e:
+        error_msg = str(e)
+        if "Could not find challenges API endpoint" in error_msg:
+            print("[-] Error: Could not find the challenges API endpoint.")
+            print(
+                "    The provided URL may not be a valid CTFd instance, "
+                "or the challenges API is not accessible."
+            )
+            print(
+                "    Try providing the exact challenges page URL "
+                "(e.g., https://ctf.example.com/challenges)"
+            )
+            print("    Or use --platform to specify the platform explicitly.")
+        elif "Could not find challenges API endpoint" in error_msg:
+            print("[-] Error: Could not find the challenges API endpoint.")
+            print(
+                "    Try providing the exact challenges page URL "
+                "(e.g., https://ctf.example.com/challenges)"
+            )
         if args.verbose:
             import traceback
 
             traceback.print_exc()
-        print(f"[-] Error: {e}")
+        else:
+            print(f"[-] Error: {e}")
         return 3
 
 

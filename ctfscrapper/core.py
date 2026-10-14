@@ -11,6 +11,58 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+# Known CTFd paths that should be stripped to get base URL
+CTFD_KNOWN_PATHS = [
+    "/scoreboard",
+    "/scoreboard/",
+    "/challenges",
+    "/challenges/",
+    "/login",
+    "/login/",
+    "/register",
+    "/register/",
+    "/admin",
+    "/admin/",
+    "/users",
+    "/users/",
+    "/teams",
+    "/teams/",
+    "/api/v1",
+    "/api/v1/",
+    "/api",
+    "/api/",
+]
+
+# CTFd API endpoints to try (in order of preference)
+CTFD_API_ENDPOINTS = [
+    "/api/v1/challenges",
+    "/api/challenges",
+    "/challenges",
+]
+
+# CTFd identifiers for platform detection
+CTFD_INDICATORS = [
+    "ctfd",
+    "ctf.inst",
+    "ctfd.io",
+    "ctfd_instance",
+]
+
+
+def normalize_base_url(url: str) -> str:
+    """Extract base URL from any CTFd URL by stripping known paths."""
+    url = url.rstrip("/")
+    for path in CTFD_KNOWN_PATHS:
+        if url.endswith(path):
+            return url[: -len(path)]
+    return url
+
+
+def is_ctfd_url(url: str) -> bool:
+    """Check if URL appears to be a CTFd instance."""
+    url_lower = url.lower()
+    return any(indicator in url_lower for indicator in CTFD_INDICATORS)
+
 
 class CTFScraper:
     """Universal CTF Challenge Scraper supporting CTFd, NoCTF, and generic platforms."""
@@ -56,7 +108,9 @@ class CTFScraper:
         delay: float = 0.1,
         logger=None,
     ):
-        self.base_url = base_url.rstrip("/")
+        # Normalize base URL to handle any CTFd URL (scoreboard, challenges, login, etc.)
+        self.base_url = normalize_base_url(base_url)
+        self.original_url = base_url.rstrip("/")
         self.username = username
         self.password = password
         self.platform = platform.lower()
@@ -190,15 +244,22 @@ class CTFScraper:
                 allow_redirects=True,
             )
 
-            # Verify login by accessing challenges API
+            # Verify login by accessing challenges API - use detected endpoint
             if resp.status_code in [200, 302]:
-                test_url = urljoin(self.base_url, str(config["api_challenges"]))
+                api_endpoint = self.detect_api_endpoint()
+                if not api_endpoint:
+                    self.logger("error", "Could not find challenges API endpoint")
+                    return False
+
+                test_url = urljoin(self.base_url, api_endpoint)
                 test_resp = self.session.get(test_url, timeout=10)
                 if test_resp.status_code == 200:
                     try:
                         data = test_resp.json()
                         if data.get("success") or "data" in data or "results" in data:
                             self.logger("success", "Login successful!")
+                            # Update config with detected API endpoint
+                            self.config["api_challenges"] = api_endpoint
                             return True
                     except Exception:
                         pass
@@ -218,8 +279,19 @@ class CTFScraper:
     def fetch_challenges_list(self) -> List[Dict]:
         """Fetch list of all challenges"""
         assert self.config is not None, "login() must be called first"
-        api_url = urljoin(self.base_url, self.config["api_challenges"])
-        self.logger("info", "Fetching challenges from API...")
+
+        # Use detected API endpoint or fallback to config
+        api_endpoint = self.config.get("api_challenges")
+        if not api_endpoint:
+            self.logger("warning", "API endpoint not in config, detecting...")
+            api_endpoint = self.detect_api_endpoint()
+            if not api_endpoint:
+                self.logger("error", "Could not find challenges API endpoint")
+                return []
+            self.config["api_challenges"] = api_endpoint
+
+        api_url = urljoin(self.base_url, api_endpoint)
+        self.logger("info", f"Fetching challenges from API: {api_url}")
 
         try:
             resp = self.session.get(api_url, timeout=self.timeout)
@@ -351,6 +423,43 @@ class CTFScraper:
     def normalize_name(name: str) -> str:
         """Normalize name for case-insensitive, space-insensitive comparison"""
         return name.lower().replace(" ", "").replace("-", "").replace("_", "")
+
+    def detect_api_endpoint(self) -> Optional[str]:
+        """Detect and validate the challenges API endpoint by trying multiple endpoints.
+
+        Returns the working API endpoint path if found, None otherwise.
+        """
+        self.logger("info", "Detecting challenges API endpoint...")
+
+        for endpoint in CTFD_API_ENDPOINTS:
+            api_url = urljoin(self.base_url, endpoint)
+            self.logger("debug", f"Trying API endpoint: {api_url}")
+
+            try:
+                resp = self.session.get(api_url, timeout=10)
+                if resp.status_code == 200:
+                    try:
+                        data = resp.json()
+                        # Check if response has expected structure
+                        if "data" in data or "results" in data or isinstance(data, list):
+                            self.logger("success", f"Found working API endpoint: {endpoint}")
+                            return endpoint
+                    except Exception:
+                        continue
+                elif resp.status_code == 401:
+                    # Unauthorized but endpoint exists
+                    self.logger("success", f"Found API endpoint (requires auth): {endpoint}")
+                    return endpoint
+                elif resp.status_code == 403:
+                    # Forbidden but endpoint exists
+                    self.logger("success", f"Found API endpoint (forbidden): {endpoint}")
+                    return endpoint
+            except Exception as e:
+                self.logger("debug", f"Endpoint {endpoint} failed: {e}")
+                continue
+
+        self.logger("error", "Could not find a working challenges API endpoint")
+        return None
 
     def organize_challenges(self, download_files: bool = True, connect_nc: bool = True):
         """Organize all challenges into category/challenge folders"""
