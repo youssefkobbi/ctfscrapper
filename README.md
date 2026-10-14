@@ -6,6 +6,8 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey.svg)]()
 [![Status](https://img.shields.io/badge/Status-Beta-yellow.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-Passing-brightgreen.svg)]()
+[![Code Style](https://img.shields.io/badge/Code%20Style-Black-000000.svg)]()
 
 ```
     ██████╗██╗  ██╗███████╗███████╗████████╗ ██████╗ ██████╗ ███╗   ██╗
@@ -17,6 +19,8 @@
               Universal CTF Challenge Scraper v1.0.0
 ```
 
+---
+
 ## ✨ Features
 
 | Feature | Description |
@@ -25,98 +29,300 @@
 | 🔐 **Smart Auth** | Auto-detects CSRF tokens, handles nonces |
 | 📥 **File Download** | Downloads all challenge attachments (binaries, source, PCAPs, images) |
 | 🔌 **Netcat Capture** | Connects to `nc` services and captures initial output/banners |
-| 📁 **Organized Output** | `category/challenge_name/` with `info.txt`, `files/`, `nc_output.txt` |
+| 📁 **Organized Output** | `CTF_Name/category/challenge_name/` with `info.txt`, `files/`, `nc_output.txt` |
 | 📊 **Summary Index** | `summary.json` with complete challenge metadata |
+| 🎯 **Selective Scraping** | Choose specific categories and challenges interactively |
+| 🔄 **Folder Persistence** | Resume scraping - merges into existing folders, handles overwrites |
 | ⚡ **Fast & Resilient** | Retries, timeouts, rate limiting, resume capability |
 | 🖥️ **Cross-Platform** | Linux, Windows, macOS (Python 3.8+) |
 
-## 🚀 Quick Start
+---
 
-### Installation
+## 📦 Installation
+
+### Prerequisites
+- **Python 3.8+** (check with `python3 --version` or `python --version`)
+- **pip** (usually comes with Python)
+- **git** (for cloning from source)
+
+### 🐧 Linux (Ubuntu/Debian/Kali/Arch/Fedora)
 
 ```bash
-# From PyPI (when published)
-pip install ctfscrapper
+# Install dependencies
+sudo apt update && sudo apt install -y python3 python3-venv python3-pip git
 
-# From source
+# Clone and install
 git clone https://github.com/youssefkobbi/ctfscrapper.git
 cd ctfscrapper
+python3 -m venv venv
+source venv/bin/activate
 pip install -e .
 
-# Or run directly without install
+# Or install globally (without venv)
+pip install -e .
+```
+
+**Arch Linux:**
+```bash
+sudo pacman -S python python-virtualenv git
+git clone https://github.com/youssefkobbi/ctfscrapper.git
+cd ctfscrapper
+python -m venv venv
+source venv/bin/activate
+pip install -e .
+```
+
+**Fedora:**
+```bash
+sudo dnf install python3 python3-virtualenv git
+git clone https://github.com/youssefkobbi/ctfscrapper.git
+cd ctfscrapper
+python3 -m venv venv
+source venv/bin/activate
+pip install -e .
+```
+
+### 🪟 Windows (PowerShell / CMD)
+
+```powershell
+# Install Python from https://python.org/downloads (check "Add to PATH")
+# Or use winget:
+winget install Python.Python.3.11
+
+# Clone and install
+git clone https://github.com/youssefkobbi/ctfscrapper.git
+cd ctfscrapper
+python -m venv venv
+venv\Scripts\activate
+pip install -e .
+
+# Or install globally
+pip install -e .
+```
+
+### 🍎 macOS
+
+```bash
+# Install via Homebrew
+brew install python3 git
+
+# Or install Python from https://python.org/downloads
+
+# Clone and install
+git clone https://github.com/youssefkobbi/ctfscrapper.git
+cd ctfscrapper
+python3 -m venv venv
+source venv/bin/activate
+pip install -e .
+```
+
+### 🐳 Docker (Alternative)
+
+```bash
+# Build
+docker build -t ctfscrapper .
+
+# Run
+docker run --rm -it \
+  -v $(pwd)/output:/output \
+  ctfscrapper \
+  -u https://ctf.example.com -U user -P pass -o /output
+```
+
+### Verify Installation
+
+```bash
+ctfscrapper --help
+# Or without install:
 python -m ctfscrapper --help
 ```
 
-### Basic Usage
+---
+
+## 🚀 Quick Start
+
+### 1. Interactive Mode (Recommended for Beginners)
 
 ```bash
-# CTFd (auto-detected)
-ctfscrapper -u https://ctf.example.com -U myuser -P mypass
-
-# Explicit platform
-ctfscrapper -u https://ctf.example.com -U user -P pass --platform ctfd
-
-# NoCTF
-ctfscrapper -u https://ctf.example.com -U user -P pass --platform noctf
-
-# Custom output directory
-ctfscrapper -u https://ctf.example.com -U user -P pass -o my_ctf_data
+# Just provide the URL - it will prompt for everything else
+ctfscrapper https://ctf.example.com
 ```
 
-### Environment Variables
+**What happens:**
+1. Enter CTF URL → prompts for username/password
+2. Select platform (auto-detect / CTFd / NoCTF / Generic)
+3. Choose mode: **Selective** (pick categories/challenges) or **Full** (all)
+4. For selective: pick categories → pick challenges per category → confirm
+5. Scrapes and organizes everything automatically
+
+### 2. Direct Mode (Automation / CI/CD)
 
 ```bash
+# Full scrape with all options
+ctfscrapper \
+  -u https://ctf.example.com \
+  -U myusername \
+  -P mypassword \
+  -o my_ctf_data \
+  --platform ctfd
+
+# Quick recon (metadata only, fast)
+ctfscrapper -u https://ctf.example.com -U user -P pass \
+  --no-files --no-nc --max 5 -q
+
+# Use environment variables (recommended for CI/CD)
 export CTFSCRAPPER_URL="https://ctf.example.com"
 export CTFSCRAPPER_USER="myuser"
-export CTFSCRAPPER_PASS="mypass"
-
-# Now just run:
-ctfscrapper
+export CTFSCRAPPER_PASS="mypassword"
+ctfscrapper -o output_dir
 ```
+
+---
+
+## 📖 Complete Command Reference
+
+```
+ctfscrapper [OPTIONS] [URL]
+
+Positional Arguments:
+  URL                     CTF base URL (interactive mode if provided without -u)
+
+Required (Direct Mode):
+  -u, --url URL           CTF base URL (e.g., https://ctf.example.com)
+  -U, --user USER         Username/email
+  -P, --pass PASS         Password
+
+Platform Options:
+  --platform CHOICE       Platform: auto|ctfd|noctf|generic (default: auto)
+  --login-url URL         Custom login endpoint (default: <url>/login)
+
+Output Options:
+  -o, --output DIR        Output directory (default: ctf-data)
+  --no-files              Skip downloading challenge files
+  --no-nc                 Skip netcat connections
+  --max N                 Maximum challenges to process (0 = all)
+
+Network Options:
+  --timeout SEC           HTTP timeout in seconds (default: 30)
+  --nc-timeout SEC        Netcat timeout in seconds (default: 10)
+  --delay SEC             Delay between requests in seconds (default: 0.1)
+  --no-verify-ssl         Disable SSL certificate verification (for self-signed certs)
+
+Display Options:
+  -q, --quiet             Quiet mode (minimal output, no banner)
+  --no-color              Disable colored output
+  -v, --verbose           Verbose output
+  -i, --interactive       Force interactive mode
+  --version               Show version
+  -h, --help              Show this help message and exit
+
+Environment Variables:
+  CTFSCRAPPER_URL         Default CTF URL
+  CTFSCRAPPER_USER        Default username
+  CTFSCRAPPER_PASS        Default password
+```
+
+### Exit Codes
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Login failed / scraping failed |
+| 2 | No challenges found |
+| 3 | Network error |
+| 4 | Invalid arguments |
+| 130 | Interrupted by user (Ctrl+C) |
+
+---
+
+## 🎮 Usage Modes
+
+### Mode 1: Selective Scrape (Interactive - Default)
+
+```bash
+ctfscrapper https://ctf.example.com
+```
+
+**Interactive Flow:**
+```
+1. Enter username/password
+2. Select platform (auto/ctfd/noctf/generic)
+3. Choose: [1] Selective Scrape  [2] Full Scrape
+4. If Selective:
+   - Enter CTF name (for folder)
+   - List available categories → enter: Web/Pwn/Crypto
+   - For each category: select challenges (Baby Win/Flag Roulette)
+   - Add more categories? (y/n)
+   - Shows summary → confirm (y/n)
+6. Scrapes only selected → organizes into folders
+```
+
+**Category/Challenge Selection Syntax:**
+```
+# Categories (separated by /)
+Web
+Web/Pwn
+Web/Pwn/Crypto
+all or everything    # All categories
+
+# Challenges (same syntax)
+Baby Win
+Baby Win/Flag Roulette
+Baby Win/Flag Roulette/Black Flash
+all or everything    # All challenges in category
+```
+
+**Matching:** Case-insensitive, space-insensitive (e.g., "Baby Win" matches "baby-win")
+
+---
+
+### Mode 2: Full Scrape (All Challenges)
+
+```bash
+# Interactive - choose "Full Scrape" at mode selection
+ctfscrapper https://ctf.example.com
+# Select mode 2 at prompt
+
+# Or direct mode (scrapes everything)
+ctfscrapper -u https://ctf.example.com -U user -P pass
+```
+
+---
 
 ## 📁 Output Structure
 
 ```
-ctf-data/
-├── pwn/
-│   ├── Baby_Win/
-│   │   ├── info.txt              # Challenge metadata + description
-│   │   ├── files/
-│   │   │   ├── challenge.c       # Source code
-│   │   │   └── chall             # Binary
-│   │   └── nc_output.txt         # "=== CTF baby_win ===\nTell me a story:"
-│   ├── Libc_Voyage/
-│   │   ├── info.txt
-│   │   ├── files/
-│   │   │   ├── libc_voyage
-│   │   │   ├── libc_voyage.c
-│   │   │   ├── libc.so.6
-│   │   │   └── ld-linux-x86-64.so.2
-│   │   └── nc_output.txt
+ctf-data/                           # or custom -o directory
+├── CTF_Name/                       # Your CTF name
+│   ├── .ctfscrapper_meta.json      # Metadata for persistence
+│   ├── summary.json                # Complete index
+│   ├── pwn/
+│   │   ├── Baby_Win/
+│   │   │   ├── info.txt            # Metadata + description
+│   │   │   ├── files/
+│   │   │   │   ├── challenge.c     # Source code
+│   │   │   │   └── chall           # Binary
+│   │   │   └── nc_output.txt       # Netcat banner output
+│   │   └── Libc_Voyage/
+│   │       ├── info.txt
+│   │       ├── files/
+│   │       │   ├── libc_voyage
+│   │       │   ├── libc_voyage.c
+│   │       │   ├── libc.so.6
+│   │       │   └── ld-linux-x86-64.so.2
+│   │       └── nc_output.txt
+│   ├── Cryptography/
+│   │   ├── Reused_key/
+│   │   │   ├── info.txt
+│   │   │   ├── files/
+│   │   │   │   ├── message_a.txt
+│   │   │   │   └── message_b.txt
+│   │   │   └── nc_output.txt
 │   └── ...
-├── Cryptography/
-│   ├── Reused_key/
-│   │   ├── info.txt
-│   │   ├── files/
-│   │   │   ├── message_a.txt
-│   │   │   └── message_b.txt
-│   │   └── nc_output.txt
-│   └── ...
-├── Web/
-│   ├── Hash_Comparison/
-│   │   ├── info.txt
-│   │   └── nc_output.txt         # HTTP connection info
-│   └── ...
-├── Reverse_Engineering/
-├── DFIR/
-├── OSINT/
-├── misc/
-├── Cyber_Threat_Intelligence/
-└── summary.json                  # Complete challenge index
+├── summary.json                    # Master index
+└── .ctfscrapper_meta.json          # Global metadata
 ```
 
 ### info.txt Format
-
 ```
 Challenge: Baby Win
 ID: 73
@@ -133,7 +339,6 @@ A first stack-smashing exercise. Redirect execution to the function that was nev
 ```
 
 ### summary.json
-
 ```json
 {
   "ctf_url": "https://ctf.example.com",
@@ -163,85 +368,39 @@ A first stack-smashing exercise. Redirect execution to the function that was nev
 }
 ```
 
-## 📖 Command Reference
+---
 
-```
-ctfscrapper [OPTIONS]
+## 🔄 Folder Persistence & Resume
 
-Required:
-  -u, --url URL           CTF base URL
-  -U, --user USER         Username
-  -P, --pass PASS         Password
+**Key Feature:** Run the tool multiple times on the same CTF - it merges intelligently!
 
-Platform:
-  --platform CHOICE       auto|ctfd|noctf|generic (default: auto)
-  --login-url URL         Custom login endpoint
+### How It Works
+1. **First run:** Creates `CTF_Name/` folder with selected challenges
+2. **Second run (same CTF name + URL):**
+   - Detects existing folder
+   - Shows existing challenges
+   - Prompts for overwrite: `y` (yes), `n` (no), `all` (overwrite all), `skip` (skip all)
+   - Merges new challenges into existing folders
+   - Updates metadata
 
-Output:
-  -o, --output DIR        Output directory (default: ctf-data)
-  --no-files              Skip file downloads
-  --no-nc                 Skip netcat connections
-  --max N                 Limit challenges to process
+### Overwrite Options
+| Scenario | Prompt | Options |
+|----------|--------|---------|
+| 1 existing challenge | "Challenge 'X' exists. Overwrite?" | `y` / `n` |
+| Multiple existing | "N challenges exist. Overwrite?" | `y` / `n` / `all` / `skip` |
+| `all` | Overwrite all existing | |
+| `skip` | Skip all existing | |
 
-Network:
-  --timeout SEC           HTTP timeout (default: 30)
-  --nc-timeout SEC        Netcat timeout (default: 10)
-  --delay SEC             Delay between requests (default: 0.1)
-  --no-verify-ssl         Disable SSL verification
-
-Display:
-  -q, --quiet             Minimal output
-  --no-color              Disable colors
-  -v, --verbose           Verbose output
-  --version               Show version
-```
-
-## 🎯 Examples
-
-### Full Scrape with All Features
-
-```bash
-ctfscrapper \
-  -u https://ctf.example.com \
-  -U player1 \
-  -P secret123 \
-  -o ctf_2024 \
-  --platform ctfd
-```
-
-### Quick Recon (Metadata Only)
-
-```bash
-ctfscrapper -u https://ctf.example.com -U u -P p --no-files --no-nc --max 5
-```
-
-### CI/CD Pipeline
-
-```bash
-# In your CI script
-ctfscrapper \
-  -u "$CTF_URL" \
-  -U "$CTF_USER" \
-  -P "$CTF_PASS" \
-  -o artifacts/ctf-data \
-  --no-nc \
-  -q
-```
-
-### Windows PowerShell
-
-```powershell
-# Works natively on Windows
-python -m ctfscrapper -u https://ctf.example.com -U user -P pass
-```
+---
 
 ## 🔧 Advanced Usage
 
 ### As a Python Module
 
 ```python
-from ctfscrapper import CTFScraper
+from ctfscrapper import CTFScraper, run_interactive
 
+# Basic usage
 scraper = CTFScraper(
     base_url="https://ctf.example.com",
     username="user",
@@ -253,7 +412,19 @@ scraper = CTFScraper(
     delay=0.1,
 )
 
+# Full scrape
 success = scraper.run(download_files=True, connect_nc=True)
+
+# Selective scrape
+success = scraper.run_selective(
+    category_filter=["Web", "Pwn"],
+    challenge_filter={"Web": ["Hash Comparison"], "Pwn": ["Baby Win"]},
+    download_files=True,
+    connect_nc=True,
+)
+
+# Interactive mode programmatically
+run_interactive("https://ctf.example.com", verify_ssl=True)
 ```
 
 ### Custom Logger
@@ -262,40 +433,96 @@ success = scraper.run(download_files=True, connect_nc=True)
 import logging
 
 logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger("ctfscrapper")
+logger = logging.getLogger("myapp")
 
-scraper = CTFScraper(..., logger=lambda level, msg: logger.log(
-    {"info": logging.INFO, "success": logging.INFO, 
-     "warning": logging.WARNING, "error": logging.ERROR, "debug": logging.DEBUG}[level], msg
-))
+scraper = CTFScraper(
+    base_url="https://ctf.example.com",
+    username="user",
+    password="pass",
+    logger=lambda level, msg: logger.log(
+        {"info": logging.INFO, "success": logging.INFO, 
+         "warning": logging.WARNING, "error": logging.ERROR, "debug": logging.DEBUG}[level], msg
+    ),
+)
 ```
 
-## 🛠️ Development
+### CI/CD Integration (GitHub Actions)
 
-```bash
-# Clone and setup
-git clone https://github.com/youssefkobbi/ctfscrapper.git
-cd ctfscrapper
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -e .[dev]
+```yaml
+# .github/workflows/scrape.yml
+name: Scrape CTF Challenges
 
-# Run tests
-pytest
+on:
+  workflow_dispatch:
+    inputs:
+      ctf_url:
+        description: 'CTF URL'
+        required: true
+      ctf_user:
+        description: 'Username'
+        required: true
 
-# Format code
-black ctfscrapper/
-flake8 ctfscrapper/
-mypy ctfscrapper/
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install ctfscrapper
+        run: pip install ctfscrapper
+      
+      - name: Scrape challenges
+        run: |
+          ctfscrapper \
+            -u "${{ github.event.inputs.ctf_url }}" \
+            -U "${{ github.event.inputs.ctf_user }}" \
+            -P "${{ secrets.CTF_PASSWORD }}" \
+            -o artifacts/ctf-data \
+            --no-nc \
+            -q
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctf-challenges
+          path: artifacts/ctf-data/
 ```
 
-## 📋 Supported Platforms
+### GitLab CI
+
+```yaml
+scrape_ctf:
+  stage: scrape
+  image: python:3.11-slim
+  variables:
+    PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+  script:
+    - pip install ctfscrapper
+    - ctfscrapper -u "$CTF_URL" -U "$CTF_USER" -P "$CTF_PASS" -o ctf-data --no-nc -q
+  artifacts:
+    paths:
+      - ctf-data/
+    expire_in: 1 week
+  only:
+    - schedules
+```
+
+---
+
+## 🌐 Supported Platforms
 
 | Platform | API Endpoint | Auth Method | Status |
 |----------|-------------|-------------|--------|
 | **CTFd** | `/api/v1/challenges` | Form + CSRF nonce | ✅ Full |
 | **NoCTF** | `/api/challenges` | JSON POST | ✅ Full |
 | **Generic** | `/api/challenges` | Form POST | ✅ Best effort |
+
+---
 
 ## ⚠️ Disclaimer
 
@@ -306,9 +533,13 @@ mypy ctfscrapper/
 > - Do not use against production systems without authorization
 > - The authors are not responsible for misuse
 
+---
+
 ## 📄 License
 
 MIT License - see [LICENSE](LICENSE) for details.
+
+---
 
 ## 🤝 Contributing
 
@@ -322,8 +553,16 @@ Areas for contribution:
 - [ ] Parallel downloads for speed
 - [ ] Docker support
 
+---
+
 ## 🙏 Acknowledgments
 
 - CTFd team for the excellent platform
 - All CTF organizers and challenge authors
 - The CTF community for sharing knowledge
+
+---
+
+**Made with ❤️ for the CTF community**
+
+[⬆ Back to Top](#ctfscrapper-)
