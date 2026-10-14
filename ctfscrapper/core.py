@@ -2,6 +2,7 @@
 
 import json
 import re
+import signal
 import time
 from pathlib import Path
 from typing import Dict, List, Optional, Any
@@ -125,6 +126,17 @@ class CTFScraper:
         self.session = requests.Session()
         self.session.verify = verify_ssl
 
+        # Set a proper User-Agent to avoid 403 errors
+        self.session.headers.update(
+            {
+                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "application/json, text/html, */*",
+                "Accept-Language": "en-US,en;q=0.9",
+            }
+        )
+
         # Configure retries
         retry_strategy = Retry(
             total=3,
@@ -138,6 +150,11 @@ class CTFScraper:
 
         self.challenges: list[dict] = []
         self.config: Optional[Dict] = None
+        self._shutdown = False
+
+        # Set up signal handlers for graceful shutdown
+        signal.signal(signal.SIGINT, self._signal_handler)
+        signal.signal(signal.SIGTERM, self._signal_handler)
 
     def _default_logger(self, level: str, msg: str):
         """Default logger using print with colors"""
@@ -159,6 +176,11 @@ class CTFScraper:
         color = colors.get(level, "")
         reset = colors["reset"]
         print(f"{color}{prefix.get(level, '[*]')} {msg}{reset}")
+
+    def _signal_handler(self, signum, frame):
+        """Handle shutdown signals gracefully"""
+        self.logger("warning", "Interrupt received, saving progress...")
+        self._shutdown = True
 
     def detect_platform(self) -> str:
         """Auto-detect CTF platform"""
@@ -244,8 +266,9 @@ class CTFScraper:
                 allow_redirects=True,
             )
 
-            # Verify login by accessing challenges API - use detected endpoint
+            # Check if login was successful (could be 200, 302, or even 403 with redirect)
             if resp.status_code in [200, 302]:
+                # Verify login by accessing challenges API - use detected endpoint
                 api_endpoint = self.detect_api_endpoint()
                 if not api_endpoint:
                     self.logger("error", "Could not find challenges API endpoint")
@@ -263,6 +286,24 @@ class CTFScraper:
                             return True
                     except Exception:
                         pass
+                elif resp.status_code == 403:
+                    # Some CTFd instances return 403 but still set session cookies
+                    # Try to verify login anyway
+                    api_endpoint = self.detect_api_endpoint()
+                    if api_endpoint:
+                        test_url = urljoin(self.base_url, api_endpoint)
+                        test_resp = self.session.get(test_url, timeout=10)
+                        if test_resp.status_code == 200:
+                            try:
+                                data = test_resp.json()
+                                if data.get("success") or "data" in data or "results" in data:
+                                    self.logger(
+                                        "success", "Login successful (403 but session valid)!"
+                                    )
+                                    self.config["api_challenges"] = api_endpoint
+                                    return True
+                            except Exception:
+                                pass
 
             self.logger("error", f"Login failed (status: {resp.status_code})")
             if resp.status_code == 403:
@@ -688,6 +729,9 @@ class CTFScraper:
 
         self.logger("info", f"Fetching details for {len(challenge_list)} challenges...")
         for i, chal in enumerate(challenge_list, 1):
+            if self._shutdown:
+                self.logger("warning", "Shutdown requested, saving progress...")
+                break
             chal_id = chal.get("id")
             if chal_id is None:
                 continue
@@ -696,6 +740,8 @@ class CTFScraper:
             details = self.fetch_challenge_details(chal_id)
             if details:
                 self.challenges.append(details)
+                # Save metadata incrementally after each challenge
+                self._save_incremental_metadata()
             time.sleep(self.delay)
 
         self.organize_challenges(download_files=download_files, connect_nc=connect_nc)
@@ -799,6 +845,19 @@ class CTFScraper:
             except Exception:
                 return {}
         return {}
+
+    def _save_incremental_metadata(self):
+        """Save metadata incrementally after each challenge"""
+        if not self.challenges:
+            return
+        # Build categories from current challenges
+        categories: Dict[str, List[Dict]] = {}
+        for c in self.challenges:
+            cat = c.get("category", "Unknown")
+            if cat not in categories:
+                categories[cat] = []
+            categories[cat].append(c)
+        self._save_metadata(categories)
 
     def _save_metadata(self, categories: Dict):
         """Save metadata about scraped challenges"""

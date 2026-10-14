@@ -319,6 +319,14 @@ def run_interactive(
 
     output_dir = prompt_with_default("Output directory", "ctf-data")
 
+    # CTF Name (required for folder organization)
+    ctf_name = ""
+    while not ctf_name:
+        ctf_name = prompt_with_default("CTF Name (for folder organization)")
+        if not ctf_name:
+            print("[-] CTF Name is required for folder organization. Please enter a name.")
+
+    # CTF Name comes after Output directory, before other options
     login_url: Optional[str] = prompt_with_default("Custom login URL (optional)", "")
     if not login_url:
         login_url = None
@@ -326,24 +334,26 @@ def run_interactive(
     download_files = prompt_yes_no("Download challenge files?", True)
     connect_nc = prompt_yes_no("Connect to netcat services?", True)
 
-    max_challenges_str = prompt_with_default("Max challenges to process (0 = all)", "0")
-    max_challenges = (
-        int(max_challenges_str)
-        if max_challenges_str.isdigit() and int(max_challenges_str) > 0
-        else None
-    )
+    # Use sensible defaults for advanced options, only ask if user wants to customize
+    customize_advanced = prompt_yes_no("Customize advanced options (timeout, delay, etc.)?", False)
 
-    timeout = int(prompt_with_default("HTTP timeout (seconds)", "30"))
-    nc_timeout = int(prompt_with_default("Netcat timeout (seconds)", "10"))
-    delay = float(prompt_with_default("Delay between requests (seconds)", "0.1"))
+    if customize_advanced:
+        max_challenges_str = prompt_with_default("Max challenges to process (0 = all)", "0")
+        max_challenges = (
+            int(max_challenges_str)
+            if max_challenges_str.isdigit() and int(max_challenges_str) > 0
+            else None
+        )
+        timeout = int(prompt_with_default("HTTP timeout (seconds)", "30"))
+        nc_timeout = int(prompt_with_default("Netcat timeout (seconds)", "10"))
+        delay = float(prompt_with_default("Delay between requests (seconds)", "0.1"))
+    else:
+        max_challenges = None
+        timeout = 30
+        nc_timeout = 10
+        delay = 0.1
 
     verify_ssl = prompt_yes_no("Verify SSL certificates?", True)
-
-    # CTF Name
-    ctf_name = prompt_with_default("CTF Name (for folder organization)")
-    if not ctf_name:
-        print("[-] CTF Name is required for folder organization")
-        return 4
 
     # Mode selection
     print("\n--- Scrape Mode ---")
