@@ -22,7 +22,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libmagic-dev libyara-dev clamav clamav-daemon
+          sudo apt-get install -y libmagic-dev libyara-dev clamav clamav-daemon libclamav-dev
       
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
@@ -58,6 +58,7 @@ jobs:
       - name: Install optional malware detection dependencies
         run: |
           pip install yara-python clamd
+        continue-on-error: true
       
       - name: Run linting
         run: |
