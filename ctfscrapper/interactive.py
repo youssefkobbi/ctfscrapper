@@ -1,7 +1,7 @@
 """Interactive mode for ctfscrapper"""
 
 import getpass
-from typing import Optional
+from typing import Optional, List, Dict
 
 from .core import CTFScraper
 
@@ -47,6 +47,230 @@ def prompt_platform() -> str:
         elif choice == "4":
             return "generic"
         print("Invalid choice. Please enter 1-4.")
+
+
+def normalize_name(name: str) -> str:
+    """Normalize name for case-insensitive, space-insensitive comparison"""
+    return name.lower().replace(" ", "").replace("-", "").replace("_", "")
+
+
+def parse_selection(input_str: str) -> List[str]:
+    """Parse user input like 'cat1/cat2/cat3' into list"""
+    if not input_str.strip():
+        return []
+    return [s.strip() for s in input_str.split("/") if s.strip()]
+
+
+def select_categories(all_categories: List[str]) -> List[str]:
+    """Prompt user to select categories"""
+    print("\nAvailable categories:")
+    for i, cat in enumerate(sorted(all_categories), 1):
+        print(f"  {i}. {cat}")
+
+    print("\nEnter categories to scrape (separated by '/'):")
+    print("  Examples: Web, Web/Pwn, Web/Pwn/Crypto")
+    print("  Leave empty or type 'all'/'everything' for all categories")
+
+    while True:
+        user_input = prompt_with_default("Categories").strip()
+        if not user_input or user_input.lower() in ("all", "everything"):
+            return all_categories
+
+        selected = parse_selection(user_input)
+        invalid = []
+        for sel in selected:
+            # Find matching category (case-insensitive)
+            matches = [c for c in all_categories if normalize_name(c) == normalize_name(sel)]
+            if not matches:
+                invalid.append(sel)
+
+        if invalid:
+            print(f"Invalid categories: {', '.join(invalid)}")
+            print("Please try again.")
+            continue
+
+        # Return actual category names (proper case)
+        result = []
+        for sel in selected:
+            matches = [c for c in all_categories if normalize_name(c) == normalize_name(sel)]
+            result.append(matches[0])
+        return result
+
+
+def select_challenges(category: str, all_challenges: List[Dict]) -> List[str]:
+    """Prompt user to select challenges for a category"""
+    cat_challenges = [c for c in all_challenges if c.get("category") == category]
+    challenge_names = [c.get("name", "") for c in cat_challenges]
+
+    print(f"\nChallenges in '{category}':")
+    for i, name in enumerate(sorted(challenge_names), 1):
+        print(f"  {i}. {name}")
+
+    print(f"\nEnter challenges to scrape for '{category}' (separated by '/'):")
+    print("  Examples: Baby Win, Baby Win/Flag Roulette, Baby Win/Flag Roulette/Black Flash")
+    print("  Leave empty or type 'all'/'everything' for all challenges")
+
+    while True:
+        user_input = prompt_with_default(f"Challenges for {category}").strip()
+        if not user_input or user_input.lower() in ("all", "everything"):
+            return challenge_names
+
+        selected = parse_selection(user_input)
+        invalid = []
+        for sel in selected:
+            matches = [c for c in challenge_names if normalize_name(c) == normalize_name(sel)]
+            if not matches:
+                invalid.append(sel)
+
+        if invalid:
+            print(f"Invalid challenges: {', '.join(invalid)}")
+            print("Please try again.")
+            continue
+
+        # Return actual challenge names (proper case)
+        result = []
+        for sel in selected:
+            matches = [c for c in challenge_names if normalize_name(c) == normalize_name(sel)]
+            result.append(matches[0])
+        return result
+
+
+def prompt_overwrite(existing_count: int) -> str:
+    """Prompt user for overwrite decision"""
+    if existing_count == 1:
+        while True:
+            choice = input("Challenge already exists. Overwrite? (y/n): ").strip().lower()
+            if choice in ("y", "yes"):
+                return "y"
+            elif choice in ("n", "no"):
+                return "n"
+            print("Please enter 'y' or 'n'")
+    else:
+        while True:
+            choice = (
+                input(f"{existing_count} challenges already exist. Overwrite? (y/n/all/skip): ")
+                .strip()
+                .lower()
+            )
+            if choice in ("y", "yes"):
+                return "y"
+            elif choice in ("n", "no"):
+                return "n"
+            elif choice in ("all", "a"):
+                return "all"
+            elif choice in ("skip", "s"):
+                return "skip"
+            print("Please enter 'y', 'n', 'all', or 'skip'")
+
+
+def run_selective_scrape(
+    url: str,
+    username: str,
+    password: str,
+    platform: str,
+    output_dir: str,
+    login_url: Optional[str],
+    verify_ssl: bool,
+    timeout: int,
+    nc_timeout: int,
+    delay: float,
+    ctf_name: str,
+) -> int:
+    """Run interactive selective scraping"""
+    print(f"\n{'='*60}")
+    print("  ctfscrapper - Selective Scrape Mode")
+    print(f"{'='*60}")
+    print(f"\nTarget URL: {url}")
+    print(f"CTF Name: {ctf_name}\n")
+
+    # Create scraper to fetch categories
+    scraper = CTFScraper(
+        base_url=url,
+        username=username,
+        password=password,
+        platform=platform,
+        output_dir=output_dir,
+        login_url=login_url,
+        verify_ssl=verify_ssl,
+        timeout=timeout,
+        nc_timeout=nc_timeout,
+        delay=0.1,  # Fast delay for category discovery
+    )
+
+    # Login and fetch challenges
+    print("[*] Logging in and fetching challenge list...")
+    if not scraper.login():
+        return 1
+
+    challenge_list = scraper.fetch_challenges_list()
+    if not challenge_list:
+        print("[-] No challenges found")
+        return 1
+
+    # Get all categories
+    all_categories = sorted(set(c.get("category", "Unknown") for c in challenge_list))
+
+    # Select categories
+    selected_categories = select_categories(all_categories)
+    if not selected_categories:
+        print("[-] No categories selected. Exiting.")
+        return 0
+
+    # For each category, select challenges
+    selected_challenges: Dict[str, List[str]] = {}
+    for cat in selected_categories:
+        challenges = select_challenges(cat, challenge_list)
+        if challenges:
+            selected_challenges[cat] = challenges
+
+    if not selected_challenges:
+        print("[-] No challenges selected. Exiting.")
+        return 0
+
+    # Summary
+    print(f"\n{'='*60}")
+    print("Scrape Summary:")
+    print(f"{'='*60}")
+    print(f"  CTF Name: {ctf_name}")
+    print(f"  URL: {url}")
+    print(f"  Platform: {platform}")
+    print(f"  Output: {output_dir}")
+    print(f"  Categories: {len(selected_challenges)}")
+    total_challenges = sum(len(chals) for chals in selected_challenges.values())
+    print(f"  Challenges: {total_challenges}")
+    for cat, chals in selected_challenges.items():
+        print(f"    {cat}: {len(chals)} challenges")
+        for ch in chals:
+            print(f"      - {ch}")
+    print(f"{'='*60}\n")
+
+    if not prompt_yes_no("Proceed with scrape?"):
+        print("Cancelled.")
+        return 0
+
+    # Run scraper with filters
+    print("\n[*] Starting selective scrape...")
+    scraper = CTFScraper(
+        base_url=url,
+        username=username,
+        password=password,
+        platform=platform,
+        output_dir=output_dir,
+        login_url=login_url,
+        verify_ssl=verify_ssl,
+        timeout=timeout,
+        nc_timeout=nc_timeout,
+        delay=0.1,
+    )
+
+    success = scraper.run_selective(
+        category_filter=list(selected_challenges.keys()),
+        challenge_filter=selected_challenges,
+        download_files=True,
+        connect_nc=True,
+    )
+
+    return 0 if success else 1
 
 
 def run_interactive(
@@ -100,7 +324,39 @@ def run_interactive(
     nc_timeout = int(prompt_with_default("Netcat timeout (seconds)", "10"))
     delay = float(prompt_with_default("Delay between requests (seconds)", "0.1"))
 
-    verify_ssl = prompt_yes_no("Verify SSL certificates?", verify_ssl)
+    verify_ssl = prompt_yes_no("Verify SSL certificates?", True)
+
+    # CTF Name
+    ctf_name = prompt_with_default("CTF Name (for folder organization)")
+    if not ctf_name:
+        print("[-] CTF Name is required for folder organization")
+        return 4
+
+    # Mode selection
+    print("\n--- Scrape Mode ---")
+    print("  1. Selective Scrape (choose categories and challenges)")
+    print("  2. Full Scrape (all challenges)")
+
+    while True:
+        choice = input("Mode [1]: ").strip()
+        if not choice or choice == "1":
+            return run_selective_scrape(
+                url=url,
+                username=username,
+                password=password,
+                platform=platform,
+                output_dir=output_dir,
+                login_url=None,
+                verify_ssl=verify_ssl,
+                timeout=30,
+                nc_timeout=10,
+                delay=0.1,
+                ctf_name=ctf_name,
+            )
+        elif choice == "2":
+            # Use the collected settings for full scrape
+            break
+        print("Invalid choice. Please enter 1 or 2.")
 
     # Summary
     print(f"\n{'='*60}")
@@ -110,6 +366,7 @@ def run_interactive(
     print(f"  Username: {username}")
     print(f"  Platform: {platform}")
     print(f"  Output: {output_dir}")
+    print(f"  CTF Name: {ctf_name}")
     print(f"  Download files: {'Yes' if download_files else 'No'}")
     print(f"  Connect netcat: {'Yes' if connect_nc else 'No'}")
     if max_challenges:
@@ -128,7 +385,7 @@ def run_interactive(
         password=password,
         platform=platform,
         output_dir=output_dir,
-        login_url=login_url,
+        login_url=None,
         verify_ssl=verify_ssl,
         timeout=timeout,
         nc_timeout=nc_timeout,

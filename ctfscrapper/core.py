@@ -2,7 +2,6 @@
 
 import json
 import re
-import shutil
 import time
 from pathlib import Path
 from typing import Dict, List, Optional, Any
@@ -348,13 +347,21 @@ class CTFScraper:
 
         return name[:255]
 
+    @staticmethod
+    def normalize_name(name: str) -> str:
+        """Normalize name for case-insensitive, space-insensitive comparison"""
+        return name.lower().replace(" ", "").replace("-", "").replace("_", "")
+
     def organize_challenges(self, download_files: bool = True, connect_nc: bool = True):
         """Organize all challenges into category/challenge folders"""
         self.logger("info", f"Organizing {len(self.challenges)} challenges...")
 
+        self._load_metadata()
+
         if self.output_dir.exists():
-            shutil.rmtree(self.output_dir)
-        self.output_dir.mkdir(parents=True)
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Group by category
         categories: Dict[str, List[Dict]] = {}
@@ -370,7 +377,74 @@ class CTFScraper:
 
             challenges.sort(key=lambda x: x.get("value", 0))
 
+            # Load existing challenges in this category
+            existing_challenges = set()
+            if cat_dir.exists():
+                for d in cat_dir.iterdir():
+                    if d.is_dir():
+                        existing_challenges.add(d.name)
+
+            # Determine which challenges need overwrite handling
+            challenges_to_process = []
+            skip_all = False
+            overwrite_all = False
+
             for c in challenges:
+                chal_name = self.sanitize_filename(
+                    c.get("name", f"challenge_{c.get('id', 'unknown')}")
+                )
+
+                if chal_name in existing_challenges:
+                    if overwrite_all:
+                        challenges_to_process.append(c)
+                    elif skip_all:
+                        self.logger("info", f"Skipping existing challenge: {c.get('name')}")
+                    else:
+                        # Count how many challenges would be overwritten
+                        overwrite_count = sum(
+                            1
+                            for c in challenges
+                            if self.sanitize_filename(
+                                c.get("name", f"challenge_{c.get('id', 'unknown')}")
+                            )
+                            in existing_challenges
+                        )
+
+                        if overwrite_count > 1 and not hasattr(self, "_overwrite_all"):
+                            # Ask user for batch decision
+                            decision = self._prompt_overwrite_batch(
+                                len(
+                                    existing_challenges
+                                    & set(
+                                        self.sanitize_filename(
+                                            c.get("name", f"challenge_{c.get('id', 'unknown')}")
+                                        )
+                                        for c in challenges
+                                    )
+                                )
+                            )
+                            if decision == "all":
+                                overwrite_all = True
+                                challenges_to_process.append(c)
+                            elif decision == "skip":
+                                skip_all = True
+                                self.logger("info", f"Skipping existing challenge: {c.get('name')}")
+                            elif decision == "y":
+                                challenges_to_process.append(c)
+                            else:  # n
+                                self.logger("info", f"Skipping existing challenge: {c.get('name')}")
+                        else:
+                            # Single or already decided
+                            decision = self._prompt_overwrite(c.get("name", "Unknown"))
+                            if decision == "y":
+                                challenges_to_process.append(c)
+                            else:
+                                self.logger("info", f"Skipping existing challenge: {c.get('name')}")
+                else:
+                    challenges_to_process.append(c)
+
+            # Process challenges
+            for c in challenges_to_process:
                 chal_name = self.sanitize_filename(
                     c.get("name", f"challenge_{c.get('id', 'unknown')}")
                 )
@@ -411,6 +485,9 @@ class CTFScraper:
                                 f.write(f"Connection: nc {host} {port}\n")
                                 f.write(f"Output:\n{output}\n")
                             time.sleep(self.delay)
+
+        # Save metadata
+        self._save_metadata(categories)
 
         # Save summary JSON
         self._save_summary(categories)
@@ -514,3 +591,151 @@ class CTFScraper:
 
         self.organize_challenges(download_files=download_files, connect_nc=connect_nc)
         return True
+
+    def run_selective(
+        self,
+        category_filter: Optional[List[str]] = None,
+        challenge_filter: Optional[Dict[str, List[str]]] = None,
+        download_files: bool = True,
+        connect_nc: bool = True,
+    ) -> bool:
+        """Selective scraping with category and challenge filters"""
+        self.logger("info", "Starting CTF Challenge Scraper (Selective Mode)")
+        self.logger("info", f"Target: {self.base_url}")
+        self.logger("info", f"Platform: {self.platform}")
+        self.logger("info", f"Output: {self.output_dir}")
+
+        if self.platform == "auto":
+            self.platform = self.detect_platform()
+            self.logger("info", f"Detected platform: {self.platform}")
+
+        if not self.login():
+            return False
+
+        challenge_list = self.fetch_challenges_list()
+        if not challenge_list:
+            return False
+
+        # Apply category filter
+        if category_filter:
+            category_filter_norm = {self.normalize_name(c) for c in category_filter}
+            challenge_list = [
+                c
+                for c in challenge_list
+                if self.normalize_name(c.get("category", "Unknown")) in category_filter_norm
+            ]
+
+        if not challenge_list:
+            self.logger("warning", "No challenges match the category filter")
+            return False
+
+        self.logger("info", f"Fetching details for {len(challenge_list)} challenges...")
+        for i, chal in enumerate(challenge_list, 1):
+            chal_id = chal.get("id")
+            if chal_id is None:
+                continue
+            name = chal.get("name", str(chal_id))
+            self.logger("info", f"[{i}/{len(challenge_list)}] {name} (ID: {chal_id})")
+            details = self.fetch_challenge_details(chal_id)
+            if details:
+                self.challenges.append(details)
+            time.sleep(self.delay)
+
+        # Apply challenge filter
+        if challenge_filter:
+            self.challenges = self._apply_challenge_filter(self.challenges, challenge_filter)
+
+        self.organize_challenges(download_files=download_files, connect_nc=connect_nc)
+        return True
+
+    def _apply_challenge_filter(
+        self,
+        challenges: List[Dict],
+        challenge_filter: Dict[str, List[str]],
+    ) -> List[Dict]:
+        """Apply challenge filter by category"""
+        # Build normalized filter: category -> set of normalized challenge names
+        filter_map: Dict[str, set] = {}
+        for cat, chals in challenge_filter.items():
+            cat_norm = self.normalize_name(cat)
+            filter_map[cat_norm] = {self.normalize_name(c) for c in chals}
+
+        filtered = []
+        for c in self.challenges:
+            cat = c.get("category", "Unknown")
+            cat_norm = self.normalize_name(cat)
+            name = c.get("name", "")
+            name_norm = self.normalize_name(name)
+
+            if cat_norm in filter_map:
+                if name_norm in filter_map[cat_norm]:
+                    filtered.append(c)
+            else:
+                # Category not in filter, include it
+                filtered.append(c)
+
+        return filtered
+
+    def _get_metadata_path(self) -> Path:
+        """Get path to metadata file"""
+        return self.output_dir / ".ctfscrapper_meta.json"
+
+    def _load_metadata(self) -> Dict:
+        """Load existing metadata"""
+        meta_path = self._get_metadata_path()
+        if meta_path.exists():
+            try:
+                with open(meta_path, "r", encoding="utf-8") as f:
+                    return json.load(f)  # type: ignore
+            except Exception:
+                return {}
+        return {}
+
+    def _save_metadata(self, categories: Dict):
+        """Save metadata about scraped challenges"""
+        meta = {
+            "ctf_url": self.base_url,
+            "platform": self.platform,
+            "categories": {
+                cat: [c.get("name", "") for c in challenges]
+                for cat, challenges in categories.items()
+            },
+            "last_scraped": time.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        try:
+            with open(self._get_metadata_path(), "w", encoding="utf-8") as f:
+                json.dump(meta, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            self.logger("warning", f"Failed to save metadata: {e}")
+
+    def _prompt_overwrite(self, challenge_name: str) -> str:
+        """Prompt user for single challenge overwrite"""
+        while True:
+            choice = (
+                input(f"Challenge '{challenge_name}' already exists. Overwrite? (y/n): ")
+                .strip()
+                .lower()
+            )
+            if choice in ("y", "yes"):
+                return "y"
+            elif choice in ("n", "no"):
+                return "n"
+            print("Please enter 'y' or 'n'")
+
+    def _prompt_overwrite_batch(self, count: int) -> str:
+        """Prompt user for batch overwrite decision"""
+        while True:
+            choice = (
+                input(f"{count} challenges already exist. Overwrite? (y/n/all/skip): ")
+                .strip()
+                .lower()
+            )
+            if choice in ("y", "yes"):
+                return "y"
+            elif choice in ("n", "no"):
+                return "n"
+            elif choice in ("all", "a"):
+                return "all"
+            elif choice in ("skip", "s"):
+                return "skip"
+            print("Please enter 'y', 'n', 'all', or 'skip'")
