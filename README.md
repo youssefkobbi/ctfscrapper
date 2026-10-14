@@ -39,7 +39,7 @@
 pip install ctfscrapper
 
 # From source
-git clone https://github.com/yourusername/ctfscrapper.git
+git clone https://github.com/youssefkobbi/ctfscrapper.git
 cd ctfscrapper
 pip install -e .
 
@@ -274,7 +274,7 @@ scraper = CTFScraper(..., logger=lambda level, msg: logger.log(
 
 ```bash
 # Clone and setup
-git clone https://github.com/yourusername/ctfscrapper.git
+git clone https://github.com/youssefkobbi/ctfscrapper.git
 cd ctfscrapper
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate

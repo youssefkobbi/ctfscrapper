@@ -170,8 +170,8 @@ Be respectful, inclusive, and constructive. See [CODE_OF_CONDUCT.md](CODE_OF_CON
 
 ## Questions?
 
-- Open a [Discussion](https://github.com/yourusername/ctfscrapper/discussions)
-- Check existing [Issues](https://github.com/yourusername/ctfscrapper/issues)
-- Read the [Wiki](https://github.com/yourusername/ctfscrapper/wiki)
+- Open a [Discussion](https://github.com/youssefkobbi/ctfscrapper/discussions)
+- Check existing [Issues](https://github.com/youssefkobbi/ctfscrapper/issues)
+- Read the [Wiki](https://github.com/youssefkobbi/ctfscrapper/wiki)
 
 Thank you for contributing! 🙏
