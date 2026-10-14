@@ -50,10 +50,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/ctfscrapper"
-Repository = "https://github.com/yourusername/ctfscrapper"
-Issues = "https://github.com/yourusername/ctfscrapper/issues"
-Documentation = "https://github.com/yourusername/ctfscrapper/wiki"
+Homepage = "https://github.com/youssefkobbi/ctfscrapper"
+Repository = "https://github.com/youssefkobbi/ctfscrapper"
+Issues = "https://github.com/youssefkobbi/ctfscrapper/issues"
+Documentation = "https://github.com/youssefkobbi/ctfscrapper/wiki"
 
 [project.scripts]
 ctfscrapper = "ctfscrapper.cli:main"
@@ -80,7 +80,7 @@ extend-ignore = ["E203", "W503"]
 exclude = [".git", "__pycache__", "venv", "env", ".tox", "dist", "build"]
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false

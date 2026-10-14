@@ -1,6 +1,7 @@
 """Interactive mode for ctfscrapper"""
 
 import getpass
+from typing import Optional
 
 from .core import CTFScraper
 
@@ -81,7 +82,7 @@ def run_interactive(
 
     output_dir = prompt_with_default("Output directory", "ctf-data")
 
-    login_url = prompt_with_default("Custom login URL (optional)", "")
+    login_url: Optional[str] = prompt_with_default("Custom login URL (optional)", "")
     if not login_url:
         login_url = None
 

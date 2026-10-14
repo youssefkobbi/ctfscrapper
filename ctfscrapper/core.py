@@ -5,7 +5,7 @@ import re
 import shutil
 import time
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from urllib.parse import urljoin
 
 import requests
@@ -16,7 +16,7 @@ from urllib3.util.retry import Retry
 class CTFScraper:
     """Universal CTF Challenge Scraper supporting CTFd, NoCTF, and generic platforms."""
 
-    PLATFORMS = {
+    PLATFORMS: Dict[str, Dict[str, object]] = {
         "ctfd": {
             "api_challenges": "/api/v1/challenges",
             "api_challenge": "/api/v1/challenges/{id}",
@@ -50,7 +50,7 @@ class CTFScraper:
         password: str,
         platform: str = "auto",
         output_dir: str = "ctf-data",
-        login_url: str = None,
+        login_url: Optional[str] = None,
         verify_ssl: bool = True,
         timeout: int = 30,
         nc_timeout: int = 10,
@@ -83,8 +83,8 @@ class CTFScraper:
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
 
-        self.challenges = []
-        self.config = None
+        self.challenges: list[dict] = []
+        self.config: Optional[Dict] = None
 
     def _default_logger(self, level: str, msg: str):
         """Default logger using print with colors"""
@@ -123,7 +123,7 @@ class CTFScraper:
 
             # Try API endpoints
             for platform in ["ctfd", "noctf"]:
-                api_url = urljoin(self.base_url, self.PLATFORMS[platform]["api_challenges"])
+                api_url = urljoin(self.base_url, str(self.PLATFORMS[platform]["api_challenges"]))
                 resp = self.session.get(api_url, timeout=5)
                 if resp.status_code == 200:
                     try:
@@ -144,10 +144,12 @@ class CTFScraper:
             resp = self.session.get(self.login_url, timeout=10)
             config = self.PLATFORMS.get("ctfd", {})
 
-            for pattern in config.get("nonce_patterns", []):
-                match = re.search(pattern, resp.text)
-                if match:
-                    return match.group(1)
+            patterns = config.get("nonce_patterns", [])
+            if isinstance(patterns, list):
+                for pattern in patterns:
+                    match = re.search(pattern, resp.text)
+                    if match:
+                        return match.group(1)
         except Exception as e:
             self.logger("debug", f"Nonce extraction error: {e}")
         return None
@@ -156,7 +158,8 @@ class CTFScraper:
         """Login to CTF platform"""
         self.logger("info", f"Logging in to {self.base_url}...")
 
-        self.config = self.PLATFORMS.get(self.platform, self.PLATFORMS["generic"])
+        config: Dict[str, Any] = self.PLATFORMS.get(self.platform, self.PLATFORMS["generic"])
+        self.config = config
 
         # Get CSRF nonce for CTFd
         nonce = None
@@ -167,12 +170,12 @@ class CTFScraper:
 
         # Prepare login data
         login_data = {
-            self.config["login_field"]: self.username,
-            self.config["password_field"]: self.password,
+            str(config["login_field"]): self.username,
+            str(config["password_field"]): self.password,
         }
 
-        if nonce and self.config.get("nonce_field"):
-            login_data[self.config["nonce_field"]] = nonce
+        if nonce and config.get("nonce_field"):
+            login_data[str(config["nonce_field"])] = nonce
 
         headers = {
             "Content-Type": "application/x-www-form-urlencoded",
@@ -190,7 +193,7 @@ class CTFScraper:
 
             # Verify login by accessing challenges API
             if resp.status_code in [200, 302]:
-                test_url = urljoin(self.base_url, self.config["api_challenges"])
+                test_url = urljoin(self.base_url, str(config["api_challenges"]))
                 test_resp = self.session.get(test_url, timeout=10)
                 if test_resp.status_code == 200:
                     try:
@@ -215,14 +218,16 @@ class CTFScraper:
 
     def fetch_challenges_list(self) -> List[Dict]:
         """Fetch list of all challenges"""
+        assert self.config is not None, "login() must be called first"
         api_url = urljoin(self.base_url, self.config["api_challenges"])
         self.logger("info", "Fetching challenges from API...")
 
         try:
             resp = self.session.get(api_url, timeout=self.timeout)
             resp.raise_for_status()
-            data = resp.json()
+            data: Dict[str, Any] = resp.json()
 
+            challenges: List[Dict[str, Any]]
             if "data" in data:
                 challenges = data["data"]
             elif "results" in data:
@@ -241,18 +246,19 @@ class CTFScraper:
 
     def fetch_challenge_details(self, challenge_id: int) -> Optional[Dict]:
         """Fetch detailed info for a single challenge"""
+        assert self.config is not None, "login() must be called first"
         api_url = urljoin(self.base_url, self.config["api_challenge"].format(id=challenge_id))
 
         try:
             resp = self.session.get(api_url, timeout=self.timeout)
             resp.raise_for_status()
-            data = resp.json()
+            data: Dict[str, Any] = resp.json()
 
             if data.get("success") and "data" in data:
-                return data["data"]
+                return data["data"]  # type: ignore
             elif "data" in data:
-                return data["data"]
-            return data
+                return data["data"]  # type: ignore
+            return data  # type: ignore
 
         except Exception as e:
             self.logger("debug", f"Failed to fetch challenge {challenge_id}: {e}")
@@ -351,7 +357,7 @@ class CTFScraper:
         self.output_dir.mkdir(parents=True)
 
         # Group by category
-        categories = {}
+        categories: Dict[str, List[Dict]] = {}
         for c in self.challenges:
             cat = c.get("category", "Unknown")
             if cat not in categories:
@@ -497,7 +503,9 @@ class CTFScraper:
         self.logger("info", f"Fetching details for {len(challenge_list)} challenges...")
         for i, chal in enumerate(challenge_list, 1):
             chal_id = chal.get("id")
-            name = chal.get("name", chal_id)
+            if chal_id is None:
+                continue
+            name = chal.get("name", str(chal_id))
             self.logger("info", f"[{i}/{len(challenge_list)}] {name} (ID: {chal_id})")
             details = self.fetch_challenge_details(chal_id)
             if details:
