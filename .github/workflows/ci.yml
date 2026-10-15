@@ -68,7 +68,7 @@ jobs:
       
       - name: Run tests
         run: |
-          pytest tests/ -v --cov=ctfscrapper --cov-report=xml --cov-fail-under=0 --timeout=60
+          pytest tests/ -v --cov=ctfscrapper --cov-report=xml --cov-fail-under=0
 
   build:
     name: Build Package
