@@ -24,8 +24,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libmagic-dev libyara-dev clamav libclamav-dev
           # Stop clamav-daemon if it starts automatically (prevents hanging in CI)
-          sudo systemctl stop clamav-daemon 2>/dev/null || true
-          sudo systemctl disable clamav-daemon 2>/dev/null || true
+          timeout 10 sudo systemctl stop clamav-daemon 2>/dev/null || true
+          timeout 10 sudo systemctl disable clamav-daemon 2>/dev/null || true
+          # Verify clamav-daemon is not running
+          sudo systemctl is-active --quiet clamav-daemon && timeout 10 sudo systemctl stop clamav-daemon || true
           # Ensure clamav-daemon is not running
           sudo systemctl is-active --quiet clamav-daemon && sudo systemctl stop clamav-daemon || true
           # Verify installation
@@ -66,7 +68,7 @@ jobs:
       
       - name: Run tests
         run: |
-          pytest tests/ -v --cov=ctfscrapper --cov-report=xml --cov-fail-under=0
+          pytest tests/ -v --cov=ctfscrapper --cov-report=xml --cov-fail-under=0 --timeout=60
 
   build:
     name: Build Package
